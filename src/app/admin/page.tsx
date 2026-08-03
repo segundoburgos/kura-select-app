@@ -162,7 +162,7 @@ export default function AdminPage() {
                     <Tooltip 
                       contentStyle={{ backgroundColor: '#1b163a', borderColor: '#3b326b', borderRadius: '8px' }}
                       itemStyle={{ color: '#d4b76a', fontWeight: 'bold' }}
-                      formatter={(value: number) => [`$${value.toLocaleString('es-CL')}`, 'Ingresos']}
+                      formatter={(value: any) => [`$${Number(value).toLocaleString('es-CL')}`, 'Ingresos']}
                     />
                     <Line type="monotone" dataKey="ingresos" stroke="#d4b76a" strokeWidth={3} dot={{ fill: '#d4b76a', strokeWidth: 2, r: 4 }} activeDot={{ r: 6 }} />
                   </LineChart>
