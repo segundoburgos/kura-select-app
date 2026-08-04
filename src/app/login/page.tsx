@@ -22,16 +22,15 @@ export default function LoginPage() {
     const success = await login(email, password);
     
     if (success) {
-      // Determine where to go based on credentials
-      if (email === "SBURGOS") {
+      if (email === "admin@kuraselect.com") {
         router.push("/admin");
       } else if (email === "yumi@vip.com") {
-        router.push("/perfil/yumi"); // Redirect to their own profile
+        router.push("/settings");
       } else {
         router.push("/");
       }
     } else {
-      setError("Credenciales incorrectas. Inténtalo de nuevo.");
+      setError("Credenciales incorrectas. Verifica tu correo y contraseña.");
       setLoading(false);
     }
   };

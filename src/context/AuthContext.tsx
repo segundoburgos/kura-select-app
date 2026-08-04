@@ -1,6 +1,15 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { auth, db } from '../lib/firebase';
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signOut as firebaseSignOut,
+  onAuthStateChanged,
+  User as FirebaseUser
+} from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 export type Role = 'admin' | 'escort' | 'client' | null;
 
@@ -8,58 +17,99 @@ interface User {
   email: string;
   role: Role;
   name: string;
+  uid: string;
 }
 
 interface AuthContextType {
   user: User | null;
+  loading: boolean;
   login: (email: string, pass: string) => Promise<boolean>;
-  logout: () => void;
+  register: (email: string, pass: string, name: string, role: Role) => Promise<boolean>;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Load from local storage on mount
+  // Escuchar cambios de sesión en Firebase
   useEffect(() => {
-    const storedUser = localStorage.getItem('mockUser');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        // Obtener rol y nombre de Firestore
+        const docRef = doc(db, 'users', firebaseUser.uid);
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+          const userData = docSnap.data();
+          setUser({
+            uid: firebaseUser.uid,
+            email: firebaseUser.email || '',
+            role: userData.role as Role,
+            name: userData.name || 'Usuario'
+          });
+        } else {
+          // Fallback si no hay doc en Firestore
+          setUser({
+            uid: firebaseUser.uid,
+            email: firebaseUser.email || '',
+            role: 'client',
+            name: 'Usuario'
+          });
+        }
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const login = async (email: string, pass: string) => {
-    // Simulando petición al servidor
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    let loggedInUser: User | null = null;
-
-    if (email === 'SBURGOS' && pass === 'Natura@20') {
-      loggedInUser = { email, role: 'admin', name: 'S. Burgos (Admin)' };
-    } else if (email === 'yumi@vip.com' && pass === '123456') {
-      loggedInUser = { email, role: 'escort', name: 'Yumi VIP' };
-    } else if (email === 'cliente@test.com' && pass === '123456') {
-      loggedInUser = { email, role: 'client', name: 'Cliente Premium' };
-    }
-
-    if (loggedInUser) {
-      setUser(loggedInUser);
-      localStorage.setItem('mockUser', JSON.stringify(loggedInUser));
+    try {
+      await signInWithEmailAndPassword(auth, email, pass);
       return true;
+    } catch (error) {
+      console.error("Error en login:", error);
+      return false;
     }
-
-    return false;
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('mockUser');
+  const register = async (email: string, pass: string, name: string, role: Role) => {
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+      const newUser = userCredential.user;
+      
+      // Guardar el perfil en Firestore
+      await setDoc(doc(db, 'users', newUser.uid), {
+        email: email,
+        name: name,
+        role: role,
+        createdAt: new Date().toISOString()
+      });
+      
+      return true;
+    } catch (error) {
+      console.error("Error en registro:", error);
+      return false;
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await firebaseSignOut(auth);
+      setUser(null);
+    } catch (error) {
+      console.error("Error al cerrar sesión:", error);
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
-      {children}
+    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+      {!loading && children}
     </AuthContext.Provider>
   );
 }
