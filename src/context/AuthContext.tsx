@@ -52,12 +52,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           });
         } else {
           // Fallback si no hay doc en Firestore
+          const isAdmin = firebaseUser.email === 'admin@elitevip.cl';
+          
           setUser({
             uid: firebaseUser.uid,
             email: firebaseUser.email || '',
-            role: 'client',
-            name: 'Usuario'
+            role: isAdmin ? 'admin' : 'client',
+            name: isAdmin ? 'Admin Elite Vip' : 'Usuario'
           });
+          
+          // Auto-crear el documento en Firestore para el admin
+          if (isAdmin) {
+             setDoc(docRef, { email: firebaseUser.email, role: 'admin', name: 'Admin Elite Vip' });
+          }
         }
       } else {
         setUser(null);

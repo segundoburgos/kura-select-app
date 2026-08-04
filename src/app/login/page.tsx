@@ -22,7 +22,7 @@ export default function LoginPage() {
     const success = await login(email, password);
     
     if (success) {
-      if (email === "admin@kuraselect.com") {
+      if (email === "admin@elitevip.cl") {
         router.push("/admin");
       } else if (email === "yumi@vip.com") {
         router.push("/settings");
