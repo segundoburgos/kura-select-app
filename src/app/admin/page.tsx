@@ -5,6 +5,8 @@ import Navbar from "@/components/Navbar";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
+import { db } from "@/lib/firebase";
+import { collection, query, where, getDocs } from "firebase/firestore";
 import {
   BarChart,
   Bar,
@@ -18,7 +20,7 @@ import {
   Legend
 } from "recharts";
 
-// Datos de prueba para gráficos
+// Datos de prueba para gráficos (Se mantendrán estáticos temporalmente)
 const rankingData = [
   { name: "Yumi VIP", citas: 45, reseñas: 98 },
   { name: "Valentina", citas: 38, reseñas: 90 },
@@ -38,34 +40,64 @@ const incomeData = [
 ];
 
 export default function AdminPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const [mounted, setMounted] = useState(false);
-
-  // Estados Simulados para Interactividad
-  const [solicitudes, setSolicitudes] = useState([
-    { id: 1, name: "Valentina Vip", type: "Escort", time: "Hace 2 horas", img: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=100&h=100&fit=crop" },
-    { id: 2, name: "Spa Relajación", type: "Masajes", time: "Ayer", initial: "SR" }
-  ]);
   
-  const [admins, setAdmins] = useState([
-    { id: 1, name: "Carlos Moderador", role: "Moderador", initial: "CM" }
-  ]);
+  // KPIs reales
+  const [escortsCount, setEscortsCount] = useState(0);
+  const [clientsCount, setClientsCount] = useState(0);
+  
+  // Estados Dinámicos para Interactividad
+  const [solicitudes, setSolicitudes] = useState<any[]>([]); // Por ahora vacío hasta implementar flujo de solicitudes reales
+  const [admins, setAdmins] = useState<any[]>([]);
+  const [dataLoading, setDataLoading] = useState(true);
 
+  // Cargar datos de Firestore
   useEffect(() => {
-    setMounted(true);
-  }, []);
+    const fetchAdminData = async () => {
+      try {
+        // 1. Contar escorts
+        const escortsQuery = query(collection(db, 'users'), where('role', '==', 'escort'));
+        const escortsSnap = await getDocs(escortsQuery);
+        setEscortsCount(escortsSnap.size);
+
+        // 2. Contar clientes
+        const clientsQuery = query(collection(db, 'users'), where('role', '==', 'client'));
+        const clientsSnap = await getDocs(clientsQuery);
+        setClientsCount(clientsSnap.size);
+
+        // 3. Obtener lista de administradores
+        const adminsQuery = query(collection(db, 'users'), where('role', '==', 'admin'));
+        const adminsSnap = await getDocs(adminsQuery);
+        const adminsList: any[] = [];
+        adminsSnap.forEach(doc => {
+          if (doc.id !== user?.uid) { // Excluir al admin actual (Super Admin)
+            adminsList.push({ id: doc.id, name: doc.data().name || 'Admin', role: 'Administrador', initial: doc.data().name?.[0] || 'A' });
+          }
+        });
+        setAdmins(adminsList);
+
+      } catch (error) {
+        console.error("Error obteniendo datos del dashboard:", error);
+      } finally {
+        setDataLoading(false);
+      }
+    };
+
+    if (user?.role === 'admin') {
+      fetchAdminData();
+    }
+  }, [user]);
 
   // Protect the route
   useEffect(() => {
-    if (user === undefined) return;
-    if (!user || user.role !== 'admin') {
+    if (!authLoading && (!user || user.role !== 'admin')) {
       router.push('/login');
     }
-  }, [user, router]);
+  }, [user, authLoading, router]);
 
-  if (!user || user.role !== 'admin' || !mounted) {
-    return <div className="min-h-screen bg-brand-carbon text-white flex items-center justify-center">Cargando Panel...</div>;
+  if (authLoading || dataLoading || !user || user.role !== 'admin') {
+    return <div className="min-h-screen bg-brand-carbon text-white flex items-center justify-center">Cargando Panel de Mando...</div>;
   }
 
   // Funciones Interactivas (Mock Logic)
@@ -89,6 +121,7 @@ export default function AdminPage() {
   };
 
   const handleRevokeAdmin = (id: number, name: string) => {
+    // Aquí iría la lógica para cambiar el rol a 'client' en Firestore
     setAdmins(prev => prev.filter(admin => admin.id !== id));
     toast.success(`Acceso revocado a ${name}`);
   };
@@ -124,13 +157,13 @@ export default function AdminPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-[#1b163a] border border-[#3b326b] p-6 rounded-2xl relative overflow-hidden group">
               <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-blue-500/10 rounded-full blur-xl group-hover:bg-blue-500/20 transition-all"></div>
-              <h3 className="text-slate-400 text-xs font-bold uppercase mb-2">Perfiles Activos</h3>
-              <p className="text-3xl font-black text-white">124</p>
+              <h3 className="text-slate-400 text-xs font-bold uppercase mb-2">Anunciantes VIP</h3>
+              <p className="text-3xl font-black text-white">{escortsCount}</p>
             </div>
             <div className="bg-[#1b163a] border border-[#3b326b] p-6 rounded-2xl relative overflow-hidden group">
               <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-brand-emerald/10 rounded-full blur-xl group-hover:bg-brand-emerald/20 transition-all"></div>
-              <h3 className="text-slate-400 text-xs font-bold uppercase mb-2">Nuevos Clientes (Semana)</h3>
-              <p className="text-3xl font-black text-brand-emerald">+45</p>
+              <h3 className="text-slate-400 text-xs font-bold uppercase mb-2">Clientes Registrados</h3>
+              <p className="text-3xl font-black text-brand-emerald">{clientsCount}</p>
             </div>
             <div className="bg-[#1b163a] border border-[#3b326b] p-6 rounded-2xl relative overflow-hidden group">
               <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-brand-gold/10 rounded-full blur-xl group-hover:bg-brand-gold/20 transition-all"></div>
@@ -207,7 +240,7 @@ export default function AdminPage() {
                   <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
                   Equipo de Administración
                 </h2>
-                <button onClick={() => toast("Función disponible con BD conectada", { icon: '🚧' })} className="text-xs bg-brand-gold text-slate-900 font-bold px-3 py-1.5 rounded hover:bg-yellow-400 transition-colors">
+                <button onClick={() => toast("Función de invitar admin pronto", { icon: '🚧' })} className="text-xs bg-brand-gold text-slate-900 font-bold px-3 py-1.5 rounded hover:bg-yellow-400 transition-colors">
                   + Nuevo Admin
                 </button>
               </div>
@@ -221,11 +254,11 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody className="text-slate-200">
-                    {/* Fila Fija Super Admin */}
+                    {/* Fila Fija Super Admin (El usuario actual conectado si es admin) */}
                     <tr className="border-b border-[#3b326b]/50 bg-[#29224f]/10">
                       <td className="p-4 font-bold flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-brand-gold text-slate-900 flex items-center justify-center text-xs">SB</div>
-                        SBURGOS
+                        <div className="w-8 h-8 rounded-full bg-brand-gold text-slate-900 flex items-center justify-center text-xs uppercase">{user.name?.[0] || 'A'}</div>
+                        {user.name} (Tú)
                       </td>
                       <td className="p-4"><span className="bg-brand-gold/20 text-brand-gold px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider">Super Admin</span></td>
                       <td className="p-4 text-right">
@@ -237,7 +270,7 @@ export default function AdminPage() {
                     {admins.map(admin => (
                       <tr key={admin.id} className="border-b border-[#3b326b]/50 hover:bg-[#29224f]/30 transition-colors">
                         <td className="p-4 font-bold flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs">{admin.initial}</div>
+                          <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs uppercase">{admin.initial}</div>
                           {admin.name}
                         </td>
                         <td className="p-4"><span className="bg-blue-500/20 text-blue-400 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider">{admin.role}</span></td>
@@ -262,7 +295,7 @@ export default function AdminPage() {
               <div className="p-6 border-b border-[#3b326b] flex justify-between items-center bg-[#29224f]/50">
                 <h2 className="text-lg font-bold text-white flex items-center gap-2">
                   <svg className="w-5 h-5 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                  Solicitudes Pendientes
+                  Nuevos Registros (Verificación)
                 </h2>
                 <span className="bg-rose-500 text-white text-xs font-bold px-2 py-1 rounded-full">{solicitudes.length} Nuevas</span>
               </div>
@@ -296,7 +329,7 @@ export default function AdminPage() {
                     
                     {solicitudes.length === 0 && (
                        <tr>
-                         <td colSpan={3} className="p-4 text-center text-slate-500 italic text-xs">No hay solicitudes pendientes por revisar.</td>
+                         <td colSpan={3} className="p-4 text-center text-slate-500 italic text-xs">Todos los perfiles recientes han sido revisados.</td>
                        </tr>
                     )}
                   </tbody>
